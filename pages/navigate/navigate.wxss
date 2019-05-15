@@ -1,53 +1,53 @@
 /* pages/navigate/navigate.wxss */
-Page{
+
+Page {
   height: 100%;
-  display: flex;
-  flex-direction: column-reverse;
 }
-.bottom{
+
+.bottom {
   background: white;
   position: absolute;
   width: 100%;
   display: flex;
   flex-direction: column;
-  padding: 20rpx;
-  
+  padding: 10rpx;
 }
 
-.eventLocation{
+.eventLocation {
   background-color: white;
-  font-size: 40rpx;
-  padding: 10rpx;
+  font-size: 16px;
+  padding: 6rpx;
   white-space: pre-line;
   display: block;
 }
 
-.aidLocation{
-  background-color: white;
-  font-size: 40rpx;
-  padding: 10rpx;
-  white-space: pre-line;
+.aidLocation {
   display: block;
+  background-color: white;
+  font-size: 16px;
+  padding: 6rpx;
+  white-space: pre-line;
 }
-.chat_img{
+
+.chat_img {
   position: absolute;
   display: flex;
   top: 55vh;
   left: 83vw;
   width: 15vw;
   height: 15vw;
-
 }
-.currentLocation{
+
+.currentLocation {
   position: absolute;
-  background-color: white;
   display: flex;
-  top: 45vh;
-  left: 86vw;
+  top: 68vh;
+  left: 85vw;
   width: 10vw;
   height: 10vw;
 }
-.hint{
+
+.hint {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,9 +56,9 @@ Page{
   margin: 3vw;
   padding: 3vw;
   width: 88vw;
-
 }
-.hintMsg{
+
+.hintMsg {
   background: orange;
   font-size: 35rpx;
   color: white;
@@ -66,18 +66,46 @@ Page{
   padding: 10px;
   width: 80vw;
 }
-.distance{
-  width: 90vw;
-  text-align :right;
-  color:blue;
-  font-size: 35rpx;
+
+.avatar{
+  width: 120rpx;
+  height: 120rpx;
+  margin-left: 20rpx
 }
-.detail{
-  
+
+.detail {
   display: flex;
   flex-direction: row;
   align-items: center;
-  
+}
 
-  
+.detail_info {
+  display: flex;
+  flex-direction: column;
+  align-items: left;
+  width: 610rpx;
+  height: 120rpx
+}
+
+.name{
+  font-size: 24px;
+  margin-left: 20rpx
+}
+
+.tel{
+  font-size: 18px;
+  margin-left: 20rpx
+}
+
+.tel_ico{
+  width: 24px;
+  height: 24px;
+  margin-left: 20rpx
+}
+
+.distance {
+  text-align: left;
+  color: blue;
+  font-size: 16px;
+  margin-left: 20rpx;
 }

@@ -1,380 +1,331 @@
 // pages/navigate/navigate.js
-/**
- * 定义用户类型
- * 0为求救方
- * 1为施救方
- */
-const userType = 0;
+let WebIM = require("../../utils/WebIM")["default"];
+let util = require("../../utils/util.js");
 const app = getApp();
-/**
- * 定时器id
- * 关闭时要用
- */
-var timer;
+var locationTimer; //救援人员坐标定时器
+var taskTimer; //任务定时器
+var groupId; //任务通信群组Id
 Page({
 
   /**
    * 页面的初始数据
    */
   data: {
-    name: '李警官',
-    tel: '15055735530',
-    msgEventLocation: 'test',
-    msgAidLocation: 'test',
-    msg: '110',
-    hintMsg: '警察正在赶来的路上！！',
-    latitude: 39.989221,
-    longitude: 116.306076,
+    mapHeight: 0,
+    name: '待分配',
+    tel: '--------------',
+    msgEventLocation: '正在定位当前地点',
+    msgAidLocation: '正在选择施救单位',
+    hintMsg: '等待分配救援...',
+    latitude: 0,
+    longitude: 0,
     markers: [],
     polyline: [],
-    distance:0,
-    duration:0,
-    otherOpenid: ""
+    distance: 0,
+    duration: 0
   },
 
   /**
    * 生命周期函数--监听页面加载
    */
-  onLoad: function (options) {
-    console.log(options.msg)
-    this.initData()
-    this.updateLocation()
-    //this.driving()
-      
+  onLoad: function(options) {
+    //以下代码用于计算页面中各组件的高度以适应不同的手机屏幕
+    let query = wx.createSelectorQuery().in(this);
+    query.select('.bottom').boundingClientRect();
+    query.exec(res => {
+      let bottomHeight = res[0].height;
+      let windowHeight = wx.getSystemInfoSync().windowHeight;
+      let windowWidth = wx.getSystemInfoSync().windowWidth;
+      let availableHeight = ((windowHeight - bottomHeight) * (750 / windowWidth))
+      this.setData({
+        mapHeight: availableHeight
+      });
+      console.log(windowHeight)
+    });
+    this.mapCtx = wx.createMapContext('map1');
+    this.flushTaskData();
+    taskTimer = setInterval(this.flushTaskData, 5000);
+    if(app.globalData.identity == "救援人员（在线）"){
+      locationTimer = setInterval(this.setRescuerLocation, 3000);
+    }
+    this.imLogin();
   },
 
   /**
    * 生命周期函数--监听页面初次渲染完成
    */
-  onReady: function () {
-   
+  onReady: function() {
+
   },
 
   /**
    * 生命周期函数--监听页面显示
    */
-  onShow: function () {
-   
-    
+  onShow: function() {
+
   },
 
   /**
    * 生命周期函数--监听页面隐藏
    */
-  onHide: function () {
+  onHide: function() {
 
   },
 
   /**
    * 生命周期函数--监听页面卸载
    */
-  onUnload: function () {
+  onUnload: function() {
 
   },
 
   /**
    * 页面相关事件处理函数--监听用户下拉动作
    */
-  onPullDownRefresh: function () {
+  onPullDownRefresh: function() {
 
   },
 
   /**
    * 页面上拉触底事件的处理函数
    */
-  onReachBottom: function () {
+  onReachBottom: function() {
 
   },
 
   /**
    * 用户点击右上角分享
    */
-  onShareAppMessage: function () {
+  onShareAppMessage: function() {
 
   },
-  //事件回调函数
-  driving: function () {
-    var _this = this;
-    let urlHead = 'https://apis.map.qq.com/ws/direction/v1/driving/'
-    let from = this.data.markers[0].latitude + "," + this.data.markers[0].longitude
-    let to = this.data.markers[1].latitude + "," + this.data.markers[1].longitude
-    let key = 'PTVBZ-O3734-C6SUY-XFJS3-DJ3GV-Y3FTY'
-    //网络请求设置
-    var opt = {
-      //WebService请求地址，from为起点坐标，to为终点坐标，开发key为必填
-      url: urlHead+'?from='+from+'&to='+to+'&key='+key,
-      
-      method: 'GET',
-      dataType: 'json',
-      //请求成功回调
-      success: function (res) {
-        var ret = res.data
-        console.log(ret)
-        if (ret.status != 0) return; //服务异常处理
-        var coors = ret.result.routes[0].polyline, pl = [];
-        //坐标解压（返回的点串坐标，通过前向差分进行压缩）
-        var kr = 1000000;
-        for (var i = 2; i < coors.length; i++) {
-          coors[i] = Number(coors[i - 2]) + Number(coors[i]) / kr;
-        }
-        //将解压后的坐标放入点串数组pl中
-        for (var i = 0; i < coors.length; i += 2) {
-          pl.push({ latitude: coors[i], longitude: coors[i + 1] })
-        }
-        //设置polyline属性，将路线显示出来
-        _this.setData({
-          duration: ret.result.routes[0].duration,
-          distance: ret.result.routes[0].distance,
-          polyline: [{
-            points: pl,
-            color: '#00BFFF',
-            width: 6
-          }]
-        })
-      }
-    };
-    wx.request(opt);
-  },
+
   /**
-   * 页面数据初始化
-   * 优先从本地获取
-   * 可以从网络获取
-   * 用户{任务类型，事故地点，事故坐标，救援方名称，救援方坐标，救援方姓名，救援方电话，救援方人数}
-   * 工作人员{任务类型，事故地点，事故坐标，救援方名称，救援方坐标}
+   * 刷新救援任务任务各种信息
+   * 由taskTimer定时器控制，5秒请求一次
    */
-  initData(){
-    //获取起点与终点坐标
-    //获取双方名称
-    let markers = [];
-    markers = wx.getStorageSync("markers")
-    console.log(markers)
-    //console.log(markers[1].label.content)
-    this.setData({
-      markers:[markers[0],markers[markers.length-1]],
-      latitude:markers[0].latitude,
-      longitude: markers[0].longitude,
-      msgEventLocation: markers[0].label.content,
-      msgAidLocation: markers[markers.length-1].label.content,
-    })
-
-    let that = this
-    let url = "http://localhost:8088/jersey/users/getTask" + "?isWorker=" + app.globalData.isWorker +
-      "&openid=" + app.globalData.openid
-
+  flushTaskData: function() {
+    let _this = this
+    let url = app.globalData.rootUri + "/api/task/" + app.globalData.taskId
     wx.request({
       url: url,
       header: {
         'content-type': 'application/json' // 默认值
       },
-      success: function (res) {
+      success: function(res) {
         if (res.statusCode == 200) {
           console.log(res)
-          
-          that.setData({
-            markers: [{
-              height: 40,
-              iconPath: "/image/location.png",
-              id: "0",
-              label: { content: res.data.event_location},
-              latitude: res.data.event_latitude,
-              longitude: res.data.event_longitude,
-              width:40},{
-
-              height: 40,
-              iconPath: "/image/marker-1.png",
-              id: "1",
-              label: { content: res.data.organization },
-                latitude: res.data.organization_latitude,
-                longitude: res.data.organization_longitude,
-              width: 40
-              }],
-            name: res.data.name,
-            tel: res.data.tel,
-            msgEventLocation:res.data.event_location,
-            msgAidLocation: res.data.organization,
-            latitude: res.data.event_latitude,
-            longitude: res.data.event_longitude,
-            otherOpenid: res.data.otherOpenid
-
+          var markers = [];
+          var hintMsg = _this.data.hintMsg;
+          var name = _this.data.name;
+          var tel = _this.data.tel;
+          groupId = res.data.chatGroupId;
+          markers.push({
+            id: 'event',
+            latitude: res.data.eventLocationCoordinate.split(',')[0],
+            longitude: res.data.eventLocationCoordinate.split(',')[1],
+            iconPath: '/image/markerTap.png'
           })
-          if (!app.globalData.isWorker) {
-            if (res.data.type == 110) {
-              that.setData({
-                msg: 110,
-                hintMsg: '警察正在赶来的路上！！'
-              })
+          markers.push({
+            id: 'aid',
+            latitude: res.data.aidLocationCoordinate.split(',')[0],
+            longitude: res.data.aidLocationCoordinate.split(',')[1],
+            iconPath: '/image/marker.png'
+          })
+          name = res.data.rescuerName ? res.data.rescuerName : name;
+          tel = res.data.rescuerPhone ? res.data.rescuerPhone : tel;
+          if (res.data.rescuerName) {
+            if (res.data.type == 110 && app.globalData.identity == '普通用户') {
+              hintMsg = '警察正在赶来的路上！！'
+            } else if (res.data.type == 120 && app.globalData.identity == '普通用户') {
+              hintMsg = '急救人员正在赶来的路上！！'
+            } else if (res.data.type == 119 && app.globalData.identity == '普通用户') {
+              hintMsg = '消防员正在赶来的路上！！'
+            } else {
+              hintMsg = '正在赶往现场！！'
             }
-            if (res.data.type == 120) {
-              that.setData({
-                msg: 120,
-                hintMsg: '120正在赶来的路上！！'
-              })
+          } 
+          var coors = res.data.aidRoute,
+            pl = [];
+          if(coors){
+            var kr = 1000000;
+            for (var i = 2; i < coors.length; i++) {
+              coors[i] = Number(coors[i - 2]) + Number(coors[i]) / kr;
             }
-            if (res.data.type == 119) {
-              that.setData({
-                msg: 119,
-                hintMsg: '消防员正在赶来的路上！！'
+            for (var i = 0; i < coors.length; i += 2) {
+              pl.push({
+                latitude: coors[i],
+                longitude: coors[i + 1]
               })
             }
           }
-
-          
-
+          _this.setData({
+            markers: markers,
+            msgEventLocation: res.data.eventLocationName,
+            msgAidLocation: res.data.aidLocationName,
+            name: name,
+            tel: tel,
+            hintMsg: hintMsg,
+            polyline: [{
+              points: pl,
+              color: '#00BFFF',
+              width: 6
+            }]
+          })
+          if (_this.data.latitude == 0 || _this.data.longitude == 0) {
+            _this.setData({
+              latitude: markers[0].latitude,
+              longitude: markers[0].longitude
+            })
+            _this.mapCtx.includePoints({
+              padding: [100],
+              points: markers
+            })
+          }
+          if (res.data.status == '进行中') {
+            _this.getRescuerLocation();
+          } else if (res.data.status == '已完结') {
+            clearInterval(taskTimer)
+            clearInterval(locationTimer)
+            wx.showModal({
+              title: '提示',
+              content: '任务 ' + app.globalData.taskId + ' 已完结！',
+              success: function(res) {
+                app.globalData.taskId = null
+                wx.reLaunch({
+                  url: "/pages/index/index"
+                })
+              },
+            })
+          }
         } else {
           console.log(res.statusCode);
         }
-
       },
-      fail: function () {
-        console.log("index.js wx.request CheckCallUser fail");
-      },
-      complete: function () {
-        // complete
+      fail: function() {
+        app.errorModal("任务信息获取错误！请联系管理员！");
       }
     })
+  },
 
-  },
   /**
-   * 定时器回调函数
+   * 获取并显示救援人员（队长）实时位置
    */
-  updateLocation(){
-     if(app.globalData.isWorker){
-       //返回用户坐标，导航信息{路线，时间，距离}
-       timer = setInterval(this.workerUpdateLocation, 2000);
-     } else{
-       // 返回救援方坐标，时间，距离
-       //this.userUpdateLocation();
-       timer = setInterval(this.userUpdateLocation, 2000);
-     }
+  getRescuerLocation: function() {
+    let url = app.globalData.rootUri + "/api/rescuerLocation/" + app.globalData.taskId
+    var _this = this;
+    wx.request({
+      url: url,
+      header: {
+        'content-type': 'application/json' // 默认值
+      },
+      success: function(res) {
+        if (res.statusCode == 200 && res.data.rescuerLocationCoordinate) {
+          let markers = _this.data.markers
+          markers.push({
+            id: 'rescuer',
+            latitude: res.data.rescuerLocationCoordinate.split(',')[0],
+            longitude: res.data.rescuerLocationCoordinate.split(',')[1],
+            iconPath: '/image/rescuer.png'
+          })
+          _this.setData({
+            markers: markers,
+            distance: res.data.rescuerLocationCoordinate.split(',')[2],
+            duration: res.data.rescuerLocationCoordinate.split(',')[3]
+          });
+        }
+      }
+    })
   },
+
   /**
-   * 用户更新定位
-   * 获取救援方定位
-   * 获取时间与距离
+   * 上报救援人员实时位置
+   * 由locationTimer控制，默认3秒一次
    */
-  userUpdateLocation(){
-    let _this = this
+  setRescuerLocation() {
+    var _this = this;
     wx.getLocation({
       type: 'gcj02',
       success(res) {
-        console.log(res)
-
+        console.log("救援人员位置上报！ " + res);
         wx.request({
-          url: 'http://localhost:8088/jersey/users/userUpdateLocation',
-          method: 'POST',
+          url: app.globalData.rootUri + "/api/rescuerLocation/" + app.globalData.taskId,
+          method: 'PUT',
           header: {
-            'content-type': 'application/x-www-form-urlencoded' 
+            'content-type': 'application/x-www-form-urlencoded' // 默认值
           },
           data: {
-            openid: 'oAxVW4yKShgrBl_SZXyZTWRgvNYk',
-            latitude: res.latitude,
-            longitude: res.longitude,
-            otherOpenid:_this.data.otherOpenid
+            rescuerLocation: res.latitude + ',' + res.longitude,
+            openId: app.globalData.openId
           },
-          success: function (result) {
-            if (result.statusCode == 200) {
-              console.log(result)
-              let marker = {
-                iconPath: "/image/car.jpg",
-                id: "3",
-                latitude: result.data.latitude,
-                longitude: result.data.longitude,
-                height: 20,
-                width: 40
-              };
-              _this.setData({
-                markers: [_this.data.markers[0], _this.data.markers[1],marker],
-                duration: result.data.time,
-                distance: result.data.distance
-              })
-            } else {
-              console.log(result.statusCode);
-            }
-          },
-          fail: function () {
-            console.log("网络请求失败");
-          },
-          complete: function () {
-            // complete
+          fail: function() {
+            console.log("救援人员位置上报失败！");
           }
         })
-
       }
     })
-
-
-    // 网络请求
-    
   },
-  /**
-   * 工作人员更新定位
-   * 获取用户定位
-   * 导航事故地点
-   * 获取时间距离
-   */
-  workerupdateLocation() {
-    var _this = this;
 
+  /**
+   * 点击定位按钮使地图地图回到中心
+   */
+  locationTap: function () {
+    var that = this
     wx.getLocation({
       type: 'gcj02',
-      success(res) {
-        console.log(res)
-          wx.request({
-            url: 'http://localhost:8088/jersey/users/workerUpdateLocation',
-            method: 'POST',
-            header: {
-              'content-type': 'application/x-www-form-urlencoded' // 默认值
-            },
-            data: {
-              openid:'oAxVW4yKShgrBl_SZXyZTWRgvNYk',
-              latitude: res.latitude,
-              longitude: res.longitude,
-              toLatitude: "",
-              toLongitude: "",
-              otherOpenid: _this.data.otherOpenid,
-            },
-            success: function (result) {
-              if (result.statusCode == 200) {
-                console.log(result)
-
-                var ret = res.data
-                console.log(ret)
-                if (ret.status != 0) return; //服务异常处理
-                var coors = ret.result.routes[0].polyline, pl = [];
-                //坐标解压（返回的点串坐标，通过前向差分进行压缩）
-                var kr = 1000000;
-                for (var i = 2; i < coors.length; i++) {
-                  coors[i] = Number(coors[i - 2]) + Number(coors[i]) / kr;
-                }
-                //将解压后的坐标放入点串数组pl中
-                for (var i = 0; i < coors.length; i += 2) {
-                  pl.push({ latitude: coors[i], longitude: coors[i + 1] })
-                }
-                //设置polyline属性，将路线显示出来
-                _this.setData({
-                  duration: ret.result.routes[0].duration,
-                  distance: ret.result.routes[0].distance,
-                  polyline: [{
-                    points: pl,
-                    color: '#00BFFF',
-                    width: 6
-                  }]
-                })
-              } else {
-                console.log(result.statusCode);
-              }
-            },
-            fail: function () {
-              console.log("网络请求失败");
-            },
-            complete: function () {
-              // complete
-            }
-          })
-      }
+      success: function (res) {
+        that.setData({
+          latitude: res.latitude,
+          longitude: res.longitude
+        });
+      },
     })
   },
-  
 
+  /**
+   * 拨打救援人员电话
+   */
+  makeCall: function(){
+    var that = this
+    if (that.data.tel.indexOf("-") == -1){
+      wx.makePhoneCall({
+        phoneNumber: that.data.tel
+      })
+    }
+  },
+
+  /**
+   * 用户登录到通信系统
+   */
+  imLogin: function() {
+    var account = util.baseEncode(app.globalData.openId).replace(new RegExp("=", "gm"), "");
+    console.log('IM账号： ' + account);
+    wx.setStorage({
+      key: "myUsername",
+      data: account
+    });
+    app.conn.open({
+      apiUrl: WebIM.config.apiURL,
+      user: account,
+      pwd: account,
+      grant_type: this.data.grant_type,
+      appKey: WebIM.config.appkey
+    });
+  },
+
+  /**
+   * 点击聊天按钮进入聊天室
+   */
+  into_ChatRoom: function() {
+    var my = wx.getStorageSync("myUsername");
+    var nameList = {
+      myName: my,
+      your: app.globalData.taskId,
+      groupId: groupId
+    };
+    wx.navigateTo({
+      url: "../chat/chatroom?username=" + JSON.stringify(nameList)
+    });
+  }
 
 })
